@@ -7,10 +7,14 @@ version '0.1'
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo.boundlessgeo.com/main/' }
 }
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compile 'android:android:5.0_r1'
+    compile 'com.google.code.gson:gson:2.8.5'
+    compile 'org.xerial:sqlite-jdbc:3.25.2'
 }
 
 compileKotlin {
