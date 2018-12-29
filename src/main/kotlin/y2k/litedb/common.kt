@@ -1,6 +1,5 @@
 package y2k.litedb
 
-import java.io.Closeable
 import java.sql.ResultSet
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -8,11 +7,9 @@ import kotlin.random.Random
 
 suspend fun <M : Meta<T>, T : Any> LiteDb.query(meta: M, ctx: QueryContext.(M) -> Unit): List<T> =
     suspendCoroutine { cont ->
-        lateinit var closeable: Closeable
-        closeable = query(meta, ctx) {
+        query(meta, ctx) {
             cont.resume(it)
-            closeable.close()
-        }
+        }.close()
     }
 
 fun <T : Any> LiteDb.insertAll(meta: Meta<T>, xs: List<T>) =
