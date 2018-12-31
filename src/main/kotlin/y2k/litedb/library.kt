@@ -25,16 +25,19 @@ class LiteDb(connector: Connector, connString: String) {
 
     private val conn = connector.mkConnection(connString)
 
-    fun <M : Meta<T>, T : Any> query(meta: M, fctx: QueryContext.(M) -> Unit, callback: (List<T>) -> Unit): Closeable {
-        createTableIfNotExists(meta)
+    fun <M : Meta<T>, T : Any> query(meta: M, init: M.() -> Tree, callback: (List<T>) -> Unit): Closeable {
+        val where = meta.init()
+            .toSqlString()
+            .takeIf(String::isNotBlank)
+            ?.let { "WHERE $it" }
 
-        val where = mkWhere(fctx, meta)
+        createTableIfNotExists(meta)
 
         val stmt = conn.createStatement()
         val sql = "SELECT * FROM [${mkTableName(meta)}] $where"
-        println(sql)
+
         val items = stmt
-            .executeQuery(sql)
+            .executeQuery(log(sql))
             .toList {
                 val json = it.getString(it.findColumn("json"))
                 Gson().fromJson(json, getValueType(meta))
@@ -42,21 +45,6 @@ class LiteDb(connector: Connector, connString: String) {
         callback(items)
 
         return Closeable { }
-    }
-
-    private fun <M : Meta<T>, T : Any> mkWhere(fctx: QueryContext.(M) -> Unit, meta: M): String {
-        val whereList = ArrayList<String>()
-        val ctx = object : QueryContext {
-
-            override fun <T> Filterable<T>.gt(value: T) = whereList.plusAssign("$name > '$value'")
-            override fun <T> Filterable<T>.eq(value: T) = whereList.plusAssign("$name = '$value'")
-            override fun <T> Filterable<T>.lt(value: T) = whereList.plusAssign("$name < '$value'")
-            override fun and(f: QueryContext.() -> Unit) = Unit
-        }
-        ctx.fctx(meta)
-
-        return if (whereList.isEmpty()) ""
-        else whereList.joinToString(prefix = "WHERE ", separator = " AND ")
     }
 
     fun <T : Any> insert(meta: Meta<T>, value: T) {
@@ -113,9 +101,11 @@ class LiteDb(connector: Connector, connString: String) {
             .map { it.name to getReturnType(it) }
 
         val sql = "CREATE TABLE IF NOT EXISTS [${mkTableName(meta)}] (json TEXT ${mkFilterColumns(props)} )"
-        println(sql)
-        stmt.execute(sql)
+        stmt.execute(log(sql))
     }
+
+    private fun log(sql: String): String =
+        sql.also(::println)
 
     private fun mkFilterColumns(props: List<Pair<String, Class<*>>>): String =
         if (props.isEmpty()) ""
@@ -145,79 +135,8 @@ class LiteDb(connector: Connector, connString: String) {
         (meta.javaClass.genericInterfaces[0] as ParameterizedType).actualTypeArguments[0] as Class<T>
 }
 
-class QueryProp<T>
-
 interface Meta<T>
-
-interface QueryContext {
-    infix fun <T> Filterable<T>.eq(value: T)
-    infix fun <T> Filterable<T>.lt(value: T)
-    infix fun <T> Filterable<T>.gt(value: T)
-    fun and(f: QueryContext.() -> Unit)
-}
 
 class Filterable<T>(val name: String)
 
 fun <T> filter(name: String): Filterable<T> = Filterable(name)
-
-/**
- *
- */
-
-/* Models */
-
-data class Email(val id: Int, val address: String, val unread: Int) {
-    // Мета-информация о "используемых в поиске полях" внутри модели
-    companion object : Meta<Email> {
-        val address = filter<String>("address")
-    }
-}
-
-data class User(
-    val id: Int,
-    val name: String,
-    val lang: String,
-    val city: City,
-    val age: Int
-)
-
-data class City(val name: String, val location: List<Float>)
-
-/* External meta-information */
-
-// Мета-информация отдельно от модельки
-object UserMeta : Meta<User> {
-    val age = filter<Int>("age")
-    val lang = filter<String>("lang")
-}
-
-/* Example */
-
-suspend fun main(args: Array<String>) {
-    val db = LiteDb(DesktopConnector, ":memory:")
-
-    db.insert(UserMeta, mkRandomUser())
-    db.insertAll(UserMeta, List(10) { mkRandomUser() })
-
-    val users = // List<User>
-        db.query(UserMeta) {
-            it.age gt 50
-        }
-    println("User #1:\n\t${users.joinToString(separator = "\n\t")}")
-
-    val emails = // List<Email>
-        db.query(Email) {
-            it.address eq "net@net.net"
-        }
-
-    val closeable = // Closeable
-        db.query(
-            UserMeta, {
-                and {
-                    it.age lt 20
-                    it.lang eq "ru"
-                }
-            }) {
-            println("User #2:\n\t${it.joinToString(separator = "\n\t")}")
-        }
-}

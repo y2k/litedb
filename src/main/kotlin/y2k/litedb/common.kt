@@ -5,9 +5,9 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.random.Random
 
-suspend fun <M : Meta<T>, T : Any> LiteDb.query(meta: M, ctx: QueryContext.(M) -> Unit): List<T> =
+suspend fun <M : Meta<T>, T : Any> LiteDb.query(meta: M, init: M.() -> Tree): List<T> =
     suspendCoroutine { cont ->
-        query(meta, ctx) {
+        query(meta, init) {
             cont.resume(it)
         }.close()
     }
