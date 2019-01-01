@@ -140,3 +140,5 @@ interface Meta<T>
 class Filterable<T>(val name: String)
 
 fun <T> filter(name: String): Filterable<T> = Filterable(name)
+
+val EmptyFilter: Any.() -> Tree = { Tree.Leaf("'1'", "=", "1") }

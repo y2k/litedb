@@ -15,6 +15,9 @@ dependencies {
     compile 'android:android:5.0_r1'
     compile 'com.google.code.gson:gson:2.8.5'
     compile 'org.xerial:sqlite-jdbc:3.25.2'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.1.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.1.0'
 }
 
 compileKotlin {
@@ -22,4 +25,8 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
+}
+
+test {
+    useJUnitPlatform()
 }
