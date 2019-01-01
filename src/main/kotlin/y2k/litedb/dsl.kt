@@ -76,6 +76,7 @@ infix fun <T : Any> Filterable<T>.gtOrEq(value: T): Tree = Leaf(name, ">=", valu
 infix fun <T : Any> Filterable<T>.ltOrEq(value: T): Tree = Leaf(name, "<=", value)
 infix fun <T : Any> Filterable<T>.gt(value: T): Tree = Leaf(name, ">", value)
 infix fun <T : Any> Filterable<T>.lt(value: T): Tree = Leaf(name, "<", value)
+infix fun Filterable<String>.like(value: String): Tree = Leaf(name, "LIKE", value)
 
 fun or(vararg children: Tree): Tree = Node("OR", *children)
 fun and(vararg children: Tree): Tree = Node("AND", *children)
