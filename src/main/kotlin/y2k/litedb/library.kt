@@ -3,6 +3,8 @@
 package y2k.litedb
 
 import com.google.gson.Gson
+import y2k.litedb.Tree.Leaf
+import y2k.litedb.Tree.Node
 import java.io.Closeable
 import java.lang.reflect.Method
 import java.lang.reflect.ParameterizedType
@@ -141,4 +143,44 @@ class Filterable<T>(val name: String)
 
 fun <T> filter(name: String): Filterable<T> = Filterable(name)
 
-val EmptyFilter: Any.() -> Tree = { Tree.Leaf("'1'", "=", "1") }
+val EmptyFilter: Any.() -> Tree = { Leaf("'1'", "=", "1") }
+
+// DSL
+
+sealed class Tree {
+    class Node(val name: String, vararg val children: Tree) : Tree()
+    class Leaf(val attr: String, val operator: String, val value: Any) : Tree()
+}
+
+fun Tree.toSqlString(): String = when (this) {
+    is Leaf -> "$attr $operator '$value'"
+    is Node -> when {
+        children.isEmpty() -> ""
+        children.size == 1 -> children[0].toSqlString()
+        else -> children.joinToString(
+            prefix = "(",
+            separator = " $name ",
+            postfix = ")",
+            transform = Tree::toSqlString
+        )
+    }
+}
+
+class ExampleDto(val age: Attr<Int>, val name: Attr<String>)
+
+class Attr<T>(val name: String)
+
+infix fun <T : Any> Attr<T>.eq(value: T): Tree = Leaf(name, "=", value)
+infix fun <T : Any> Attr<T>.gtOrEq(value: T): Tree = Leaf(name, ">=", value)
+infix fun <T : Any> Attr<T>.ltOrEq(value: T): Tree = Leaf(name, "<=", value)
+infix fun <T : Any> Attr<T>.gt(value: T): Tree = Leaf(name, ">", value)
+infix fun <T : Any> Attr<T>.lt(value: T): Tree = Leaf(name, "<", value)
+infix fun <T : Any> Filterable<T>.eq(value: T): Tree = Leaf(name, "=", value)
+infix fun <T : Any> Filterable<T>.gtOrEq(value: T): Tree = Leaf(name, ">=", value)
+infix fun <T : Any> Filterable<T>.ltOrEq(value: T): Tree = Leaf(name, "<=", value)
+infix fun <T : Any> Filterable<T>.gt(value: T): Tree = Leaf(name, ">", value)
+infix fun <T : Any> Filterable<T>.lt(value: T): Tree = Leaf(name, "<", value)
+infix fun Filterable<String>.like(value: String): Tree = Leaf(name, "LIKE", value)
+
+fun or(vararg children: Tree): Tree = Node("OR", *children)
+fun and(vararg children: Tree): Tree = Node("AND", *children)

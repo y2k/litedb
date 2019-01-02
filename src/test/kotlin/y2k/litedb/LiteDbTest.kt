@@ -9,47 +9,45 @@ import kotlin.random.Random
 class LiteDbTest {
 
     @Test
+    fun `eq filter should success`() = runSuspend {
+        val example = mkRandomList()
+        assertQuery(example, { it.name == example[5].name }) {
+            name eq example[5].name
+        }
+    }
+
+    @Test
     fun `test no filter`() = runSuspend {
-        val expected = List(10, ::mkRandomUser)
-
-        val db = LiteDb(DesktopConnector, ":memory:")
-        db.insertAll(UserMeta, expected)
-
-        val actual = query(db, UserMeta, EmptyFilter)
-
-        assertEquals(expected, actual)
+        assertQuery(mkRandomList(), { true }, EmptyFilter)
     }
 
     @Test
     fun `test simple filter`() = runSuspend {
-        val expected = List(10, ::mkRandomUser)
-
-        val db = LiteDb(DesktopConnector, ":memory:")
-        db.insertAll(UserMeta, expected)
-
-        val actual = query(db, UserMeta) {
-            age gtOrEq 50
+        assertQuery(mkRandomList(), { it.id >= 5 }) {
+            id gtOrEq 5
         }
-
-        assertEquals(actual, expected.filter { it.age >= 50 })
     }
 
     @Test
     fun `test complex filter`() = runSuspend {
-        val expected = List(10, ::mkRandomUser)
+        assertQuery(mkRandomList(), { it.id <= 2 || it.id >= 8 }) {
+            or(
+                id ltOrEq 2,
+                id gtOrEq 8
+            )
+        }
+    }
 
+    private suspend fun assertQuery(expected: List<User>, filter: (User) -> Boolean, sqlFilter: UserMeta.() -> Tree) {
         val db = LiteDb(DesktopConnector, ":memory:")
         db.insertAll(UserMeta, expected)
 
-        val actual = query(db, UserMeta) {
-            or(
-                age ltOrEq 20,
-                age gtOrEq 50
-            )
-        }
+        val actual = query(db, UserMeta, sqlFilter)
 
-        assertEquals(actual, expected.filter { it.age <= 20 || it.age >= 50 })
+        assertEquals(actual, expected.filter(filter))
     }
+
+    private fun mkRandomList(): List<User> = List(20, ::mkRandomUser)
 
     private suspend fun <M : Meta<T>, T : Any> query(db: LiteDb, meta: M, init: M.() -> Tree): List<T> =
         suspendCoroutine { continuation ->
