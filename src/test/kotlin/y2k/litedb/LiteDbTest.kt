@@ -64,6 +64,11 @@ class LiteDbTest {
         )
 }
 
+object UserMeta : Meta<User> {
+    val id = filter<Int>("id")
+    val name = filter<String>("name")
+}
+
 data class User(
     val id: Int,
     val name: String,
