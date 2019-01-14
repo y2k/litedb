@@ -39,7 +39,7 @@ class LiteDbTest {
     }
 
     private suspend fun assertQuery(expected: List<User>, filter: (User) -> Boolean, sqlFilter: UserMeta.() -> Tree) {
-        val db = LiteDb(DesktopConnector, ":memory:")
+        val db = LiteDb(DesktopConnector(":memory:"))
         db.insertAll(UserMeta, expected)
 
         val actual = query(db, UserMeta, sqlFilter)

@@ -12,10 +12,12 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    compile 'android:android:5.0_r1'
     compile 'com.google.code.gson:gson:2.8.5'
-    compile 'org.xerial:sqlite-jdbc:3.25.2'
 
+    compileOnly 'android:android:5.0_r1'
+    compileOnly 'org.xerial:sqlite-jdbc:3.25.2'
+
+    testImplementation 'org.xerial:sqlite-jdbc:3.25.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.1.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.1.0'
 }

@@ -2,6 +2,7 @@
 
 package y2k.litedb
 
+import android.content.Context
 import com.google.gson.Gson
 import y2k.litedb.Tree.Leaf
 import y2k.litedb.Tree.Node
@@ -12,20 +13,76 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 interface Connector {
-    fun mkConnection(connection: String): Connection
+    fun insertJson(sql: String, json: String, arguments: List<Pair<Class<*>, Any>>)
+    fun executeSql(sql: String)
+    fun selectColumn(sql: String, columnName: String): List<String>
 }
 
-object DesktopConnector : Connector {
-    override fun mkConnection(connection: String): Connection {
+class AndroidConnector(context: Context, connectionString: String) : Connector {
+
+    private val database = context.openOrCreateDatabase(connectionString, 0, null)
+
+    override fun insertJson(sql: String, json: String, arguments: List<Pair<Class<*>, Any>>) {
+        val bindArgs = listOf(json) + arguments.map { it.second }
+        database.execSQL(sql, bindArgs.toTypedArray())
+    }
+
+    override fun executeSql(sql: String) =
+        database.execSQL(sql)
+
+    override fun selectColumn(sql: String, columnName: String): List<String> =
+        database.rawQuery(sql, null).use { cursor ->
+            List(cursor.count) {
+                cursor.moveToPosition(it)
+                cursor.getString(cursor.getColumnIndex(columnName))
+            }
+        }
+}
+
+class DesktopConnector(connString: String) : Connector {
+
+    private val conn = mkConnection(connString)
+
+    private fun mkConnection(connection: String): Connection {
         Class.forName("org.sqlite.JDBC")
         return DriverManager.getConnection("jdbc:sqlite:$connection")
+    }
+
+    override fun insertJson(sql: String, json: String, arguments: List<Pair<Class<*>, Any>>) {
+        val stat = conn.prepareStatement(sql)
+        stat.setString(1, json)
+
+        arguments
+            .forEachIndexed { index, (clazz, value) ->
+                when (clazz.canonicalName) {
+                    "java.lang.Integer" -> stat.setInt(index + 2, value as Int)
+                    "java.lang.String" -> stat.setString(index + 2, value as String)
+                    else -> error("$clazz")
+                }
+            }
+
+        stat.execute()
+        stat.close()
+    }
+
+    override fun executeSql(sql: String) {
+        conn.createStatement().execute(log(sql))
+    }
+
+    override fun selectColumn(sql: String, columnName: String): List<String> {
+        val stmt = conn.createStatement()
+        val resultSet = stmt.executeQuery(log(sql))
+        val jsonColumnIndex = resultSet.findColumn(columnName)
+        return resultSet
+            .toList {
+                val json = it.getString(jsonColumnIndex)
+                json
+            }
     }
 }
 
 @Suppress("RedundantSuspendModifier")
-class LiteDb(connector: Connector, connString: String) {
-
-    private val conn = connector.mkConnection(connString)
+class LiteDb(private val conn: Connector) {
 
     fun <M : Meta<T>, T : Any> query(meta: M, init: M.() -> Tree, callback: (List<T>) -> Unit): Closeable {
         val where = meta.init()
@@ -35,16 +92,9 @@ class LiteDb(connector: Connector, connString: String) {
 
         createTableIfNotExists(meta)
 
-        val stmt = conn.createStatement()
-        val sql = "SELECT * FROM [${mkTableName(meta)}] $where"
-
-        val items = stmt
-            .executeQuery(log(sql))
-            .toList {
-                val json = it.getString(it.findColumn("json"))
-                Gson().fromJson(json, getValueType(meta))
-            }
-        callback(items)
+        conn.selectColumn("SELECT json FROM [${mkTableName(meta)}] $where", "json")
+            .map { Gson().fromJson(it, getValueType(meta)) }
+            .let { callback(it) }
 
         return Closeable { }
     }
@@ -55,23 +105,13 @@ class LiteDb(connector: Connector, connString: String) {
         val (params, values) = makeInsertExtraSql(meta)
 
         val sql = "INSERT INTO [${mkTableName(meta)}] (json $params) VALUES (? $values)"
-        val s = conn.prepareStatement(sql)
-        s.setString(1, Gson().toJson(value))
-
-        meta.javaClass
+        conn.insertJson(sql, Gson().toJson(value), meta.javaClass
             .declaredMethods
             .filter { it.name.startsWith("get") }
             .map { it.name to getReturnType(it) }
-            .forEachIndexed { index, x ->
-                when (x.second.canonicalName) {
-                    "java.lang.Integer" -> s.setInt(index + 2, getValueProp(value, x.first))
-                    "java.lang.String" -> s.setString(index + 2, getValueProp(value, x.first))
-                    else -> error("${x.second}")
-                }
-            }
-
-        s.execute()
-        s.close()
+            .map { (methodName, clazz) ->
+                clazz to getValueProp<Any>(value, methodName)
+            })
     }
 
     private fun makeInsertExtraSql(meta: Meta<*>): Pair<String, String> {
@@ -94,8 +134,6 @@ class LiteDb(connector: Connector, connString: String) {
     }
 
     private fun <T : Any> createTableIfNotExists(meta: Meta<T>) {
-        val stmt = conn.createStatement()
-
         val props = meta
             .javaClass
             .declaredMethods
@@ -103,11 +141,8 @@ class LiteDb(connector: Connector, connString: String) {
             .map { it.name to getReturnType(it) }
 
         val sql = "CREATE TABLE IF NOT EXISTS [${mkTableName(meta)}] (json TEXT ${mkFilterColumns(props)} )"
-        stmt.execute(log(sql))
+        conn.executeSql(sql)
     }
-
-    private fun log(sql: String): String =
-        sql.also(::println)
 
     private fun mkFilterColumns(props: List<Pair<String, Class<*>>>): String =
         if (props.isEmpty()) ""
