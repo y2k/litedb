@@ -8,8 +8,24 @@ import kotlin.random.Random
 
 class LiteDbTest {
 
+    @Test()
+    fun `delete with filter should success`() = runTest {
+        val filter: (User) -> Boolean = { it.id < 10 }
+        val sqlFilter: UserMeta.() -> Tree = { id lt 10 }
+
+        val expected = mkRandomList()
+
+        val db = LiteDb(DesktopConnector(":memory:"))
+        db.insertAll(UserMeta, expected)
+
+        db.delete(UserMeta, sqlFilter)
+
+        val actual = query(db, UserMeta, EmptyFilter)
+        assertEquals(expected.filterNot(filter), actual)
+    }
+
     @Test
-    fun `eq filter should success`() = runSuspend {
+    fun `eq filter should success`() = runTest {
         val example = mkRandomList()
         assertQuery(example, { it.name == example[5].name }) {
             name eq example[5].name
@@ -17,19 +33,19 @@ class LiteDbTest {
     }
 
     @Test
-    fun `test no filter`() = runSuspend {
+    fun `test no filter`() = runTest {
         assertQuery(mkRandomList(), { true }, EmptyFilter)
     }
 
     @Test
-    fun `test simple filter`() = runSuspend {
+    fun `test simple filter`() = runTest {
         assertQuery(mkRandomList(), { it.id >= 5 }) {
             id gtOrEq 5
         }
     }
 
     @Test
-    fun `test complex filter`() = runSuspend {
+    fun `test complex filter`() = runTest {
         assertQuery(mkRandomList(), { it.id <= 2 || it.id >= 8 }) {
             or(
                 id ltOrEq 2,
@@ -44,7 +60,7 @@ class LiteDbTest {
 
         val actual = query(db, UserMeta, sqlFilter)
 
-        assertEquals(actual, expected.filter(filter))
+        assertEquals(expected.filter(filter), actual)
     }
 
     private fun mkRandomList(): List<User> = List(20, ::mkRandomUser)

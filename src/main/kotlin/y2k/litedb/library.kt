@@ -72,6 +72,8 @@ class DesktopConnector(connString: String) : Connector {
     override fun selectColumn(sql: String, columnName: String): List<String> {
         val stmt = conn.createStatement()
         val resultSet = stmt.executeQuery(log(sql))
+        if (resultSet.isClosed) return emptyList()
+
         val jsonColumnIndex = resultSet.findColumn(columnName)
         return resultSet
             .toList {
@@ -83,6 +85,20 @@ class DesktopConnector(connString: String) : Connector {
 
 @Suppress("RedundantSuspendModifier")
 class LiteDb(private val conn: Connector) {
+
+    fun <M : Meta<T>, T : Any> delete(meta: M, init: M.() -> Tree, callback: () -> Unit): Closeable {
+        val where = meta.init()
+            .toSqlString()
+            .takeIf(String::isNotBlank)
+            ?.let { "WHERE $it" }
+
+        createTableIfNotExists(meta)
+
+        conn.executeSql("DELETE FROM [${mkTableName(meta)}] $where")
+        callback()
+
+        return Closeable { }
+    }
 
     fun <M : Meta<T>, T : Any> query(meta: M, init: M.() -> Tree, callback: (List<T>) -> Unit): Closeable {
         val where = meta.init()

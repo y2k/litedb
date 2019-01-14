@@ -11,6 +11,13 @@ suspend fun <M : Meta<T>, T : Any> LiteDb.query(meta: M, init: M.() -> Tree): Li
         }.close()
     }
 
+suspend fun <M : Meta<T>, T : Any> LiteDb.delete(meta: M, init: M.() -> Tree): Unit =
+    suspendCoroutine { cont ->
+        delete(meta, init) {
+            cont.resume(Unit)
+        }.close()
+    }
+
 fun <T : Any> LiteDb.insertAll(meta: Meta<T>, xs: List<T>) =
     xs.forEach { insert(meta, it) }
 

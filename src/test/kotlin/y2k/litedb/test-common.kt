@@ -1,14 +1,18 @@
 package y2k.litedb
 
+import org.junit.jupiter.api.Assertions
+import java.time.Duration
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
-fun runSuspend(block: suspend () -> Unit) {
-    val run = RunSuspend()
-    block.startCoroutine(run)
-    run.await()
+fun runTest(block: suspend () -> Unit) {
+    Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1)) {
+        val run = RunSuspend()
+        block.startCoroutine(run)
+        run.await()
+    }
 }
 
 private class RunSuspend : Continuation<Unit> {
