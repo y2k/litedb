@@ -20,3 +20,6 @@ fun <T : Any> ResultSet.toList(f: (ResultSet) -> T): List<T> =
         while (it.next()) r.add(f(it))
         r
     }
+
+fun log(sql: String): String =
+    sql.also(::println)
